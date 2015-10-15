@@ -148,6 +148,39 @@ static void sandybridge_setup_graphics(void)
 	MCHBAR32(0x5418) = reg32;
 }
 
+/* PEG on IvyBridge+ needs a special startup sequence.
+ * As the MRC has its own initialization code skip it.
+ */
+static void start_peg_link_training(void)
+{
+#ifdef CONFIG_NORTHBRIDGE_INTEL_IVYBRIDGE
+	u32 tmp;
+	u32 deven;
+
+	deven = pci_read_config32(PCI_DEV(0, 0, 0), DEVEN);
+
+	if (deven & DEVEN_PEG10) {
+		tmp = pci_read_config32(PCI_DEV(0, 1, 0), 0xC24) & ~(1 << 16);
+		pci_write_config32(PCI_DEV(0, 1, 0), 0xC24, tmp | (1 << 5));
+	}
+
+	if (deven & DEVEN_PEG11) {
+		tmp = pci_read_config32(PCI_DEV(0, 1, 1), 0xC24) & ~(1 << 16);
+		pci_write_config32(PCI_DEV(0, 1, 1), 0xC24, tmp | (1 << 5));
+	}
+
+	if (deven & DEVEN_PEG12) {
+		tmp = pci_read_config32(PCI_DEV(0, 1, 2), 0xC24) & ~(1 << 16);
+		pci_write_config32(PCI_DEV(0, 1, 2), 0xC24, tmp | (1 << 5));
+	}
+
+	if (deven & DEVEN_PEG60) {
+		tmp = pci_read_config32(PCI_DEV(0, 6, 0), 0xC24) & ~(1 << 16);
+		pci_write_config32(PCI_DEV(0, 6, 0), 0xC24, tmp | (1 << 5));
+	}
+#endif
+}
+
 void sandybridge_early_initialization(int chipset_type)
 {
 	u32 capid0_a;
@@ -177,6 +210,15 @@ void sandybridge_early_initialization(int chipset_type)
 	pci_write_config32(PCI_DEV(0, 0, 0), DEVEN, deven);
 
 	sandybridge_setup_graphics();
+
+	/* Write magic value to start PEG link training.
+	 * This should be done in PCI device enumeration, but
+	 * the PCIe specification requires to wait at least 100msec
+	 * after reset for devices to come up.
+	 * As we don't want to increase boot time, enable it early and
+	 * assume the PEG is up as soon as PCI enumeration starts.
+	 * TODO: use time stamps to ensure the timings are met */
+	start_peg_link_training();
 }
 
 void northbridge_romstage_finalize(int s3resume)
