@@ -44,6 +44,7 @@
 #include <arch/ebda.h>
 #endif
 #include <timer.h>
+#include <option.h>
 
 /** Linked list of ALL devices */
 struct device *all_devices = &dev_root;
@@ -748,28 +749,48 @@ static void avoid_fixed_resources(struct device *dev)
 	}
 }
 
-device_t vga_pri = 0;
+static struct device *get_next_vga_dev(struct device *dev)
+{
+	while ((dev = dev_find_class(PCI_CLASS_DISPLAY_VGA << 8, dev))) {
+		if (!dev->enabled)
+			continue;
+
+		return dev;
+	}
+	return NULL;
+}
+
+static void disable_other_vga_devs(struct device *dev_keep)
+{
+	struct device *dev = NULL;
+
+	while ((dev = get_next_vga_dev(dev))) {
+		/* disable unused devices to save power */
+		if (dev != dev_keep) {
+			if (dev->ops && dev->ops->disable)
+				dev->ops->disable(dev);
+			else
+				dev->enabled = 0;
+		}
+	}
+}
+
 static void set_vga_bridge_bits(void)
 {
-	/*
-	 * FIXME: Modify set_vga_bridge() so it is less PCI-centric!
-	 * This function knows too much about PCI stuff, it should be just
-	 * an iterator/visitor.
-	 */
-
 	/* FIXME: Handle the VGA palette snooping. */
 	struct device *dev, *vga, *vga_onboard;
 	struct bus *bus;
+	u8 dual_graphics_mode;
+
+	if (get_option(&dual_graphics_mode, "dual_graphics_mode") != CB_SUCCESS)
+		dual_graphics_mode = 0;
 
 	bus = 0;
 	vga = 0;
 	vga_onboard = 0;
 
 	dev = NULL;
-	while ((dev = dev_find_class(PCI_CLASS_DISPLAY_VGA << 8, dev))) {
-		if (!dev->enabled)
-			continue;
-
+	while ((dev = get_next_vga_dev(dev))) {
 		printk(BIOS_DEBUG, "found VGA at %s\n", dev_path(dev));
 
 		if (dev->on_mainboard) {
@@ -782,18 +803,38 @@ static void set_vga_bridge_bits(void)
 		dev->command &= ~(PCI_COMMAND_MEMORY | PCI_COMMAND_IO);
 	}
 
-	if (!vga)
-		vga = vga_onboard;
+	if ((dual_graphics_mode == 1) && vga_onboard) {
+		/* Use chipset VGA and disable plugin VGA */
+		printk(BIOS_DEBUG, "Use integrated graphics over plugin.\n");
 
-	if (CONFIG_ONBOARD_VGA_IS_PRIMARY && vga_onboard)
-		vga = vga_onboard;
+		disable_other_vga_devs(vga_onboard);
 
-	/* If we prefer plugin VGA over chipset VGA, the chipset might
-	   want to know. */
-	if (!CONFIG_ONBOARD_VGA_IS_PRIMARY && (vga != vga_onboard) &&
-		vga_onboard && vga_onboard->ops && vga_onboard->ops->disable) {
+		vga = vga_onboard;
+	} else if ((dual_graphics_mode == 2) && vga) {
+		/* Use plugin VGA and disable chipset VGA */
 		printk(BIOS_DEBUG, "Use plugin graphics over integrated.\n");
-		vga_onboard->ops->disable(vga_onboard);
+
+		disable_other_vga_devs(vga);
+	} else {
+		if (!vga)
+			vga = vga_onboard;
+
+		if (CONFIG_ONBOARD_VGA_IS_PRIMARY && vga_onboard)
+			vga = vga_onboard;
+
+		/* If we prefer plugin VGA over chipset VGA, the chipset might
+		   want to know. */
+		if (!CONFIG_ONBOARD_VGA_IS_PRIMARY && (vga != vga_onboard) &&
+			vga_onboard) {
+			printk(BIOS_DEBUG, "Use plugin graphics over integrated.\n");
+
+			if (vga_onboard->ops && vga_onboard->ops->disable)
+				vga_onboard->ops->disable(vga_onboard);
+			else
+				vga_onboard->enabled = 0;
+		}
+
+		disable_other_vga_devs(vga);
 	}
 
 	if (vga) {
@@ -801,7 +842,6 @@ static void set_vga_bridge_bits(void)
 		printk(BIOS_DEBUG, "Setting up VGA for %s\n", dev_path(vga));
 		/* All legacy VGA cards have MEM & I/O space registers. */
 		vga->command |= (PCI_COMMAND_MEMORY | PCI_COMMAND_IO);
-		vga_pri = vga;
 		bus = vga->bus;
 	}
 
