@@ -21,4 +21,9 @@ ifeq ($(CONFIG_SOUTHBRIDGE_INTEL_COMMON),y)
 romstage-$(CONFIG_USBDEBUG_IN_ROMSTAGE) += usb_debug.c
 ramstage-$(CONFIG_USBDEBUG) += usb_debug.c
 
+ifneq ($(CONFIG_INTEL_LYNXPOINT_LP),y)
+romstage-y += gpio.c
+ramstage-y += gpio.c
+smm-$(CONFIG_HAVE_SMI_HANDLER) += gpio.c
+endif
 endif

@@ -18,10 +18,31 @@
 #include <arch/io.h>
 #include <device/device.h>
 #include <device/pci.h>
-#include "pch.h"
+
 #include "gpio.h"
 
 #define MAX_GPIO_NUMBER 75 /* zero based */
+
+/* LPC GPIO Base Address Register */
+#define GPIO_BASE		0x48
+/* PCI Configuration Space (D31:F0): LPC */
+#define PCH_LPC_DEV		PCI_DEV(0, 0x1f, 0)
+
+/* ICH7 GPIOBASE */
+#define GPIO_USE_SEL	0x00
+#define GP_IO_SEL	0x04
+#define GP_LVL		0x0c
+#define GPO_BLINK	0x18
+#define GPI_INV		0x2c
+#define GPIO_USE_SEL2	0x30
+#define GP_IO_SEL2	0x34
+#define GP_LVL2		0x38
+#define GPIO_USE_SEL3	0x40
+#define GP_IO_SEL3	0x44
+#define GP_LVL3		0x48
+#define GP_RST_SEL1	0x60
+#define GP_RST_SEL2	0x64
+#define GP_RST_SEL3	0x68
 
 static u16 get_gpio_base(void)
 {
@@ -39,42 +60,45 @@ void setup_pch_gpios(const struct pch_gpio_map *gpio)
 
 	/* GPIO Set 1 */
 	if (gpio->set1.level)
-		outl(*((u32*)gpio->set1.level), gpiobase + GP_LVL);
+		outl(*((u32 *)gpio->set1.level), gpiobase + GP_LVL);
 	if (gpio->set1.mode)
-		outl(*((u32*)gpio->set1.mode), gpiobase + GPIO_USE_SEL);
+		outl(*((u32 *)gpio->set1.mode), gpiobase + GPIO_USE_SEL);
 	if (gpio->set1.direction)
-		outl(*((u32*)gpio->set1.direction), gpiobase + GP_IO_SEL);
+		outl(*((u32 *)gpio->set1.direction), gpiobase + GP_IO_SEL);
 	if (gpio->set1.reset)
-		outl(*((u32*)gpio->set1.reset), gpiobase + GP_RST_SEL1);
+		outl(*((u32 *)gpio->set1.reset), gpiobase + GP_RST_SEL1);
 	if (gpio->set1.invert)
-		outl(*((u32*)gpio->set1.invert), gpiobase + GPI_INV);
+		outl(*((u32 *)gpio->set1.invert), gpiobase + GPI_INV);
 	if (gpio->set1.blink)
-		outl(*((u32*)gpio->set1.blink), gpiobase + GPO_BLINK);
+		outl(*((u32 *)gpio->set1.blink), gpiobase + GPO_BLINK);
 
 	/* GPIO Set 2 */
 	if (gpio->set2.level)
-		outl(*((u32*)gpio->set2.level), gpiobase + GP_LVL2);
+		outl(*((u32 *)gpio->set2.level), gpiobase + GP_LVL2);
 	if (gpio->set2.mode)
-		outl(*((u32*)gpio->set2.mode), gpiobase + GPIO_USE_SEL2);
+		outl(*((u32 *)gpio->set2.mode), gpiobase + GPIO_USE_SEL2);
 	if (gpio->set2.direction)
-		outl(*((u32*)gpio->set2.direction), gpiobase + GP_IO_SEL2);
+		outl(*((u32 *)gpio->set2.direction), gpiobase + GP_IO_SEL2);
 	if (gpio->set2.reset)
-		outl(*((u32*)gpio->set2.reset), gpiobase + GP_RST_SEL2);
+		outl(*((u32 *)gpio->set2.reset), gpiobase + GP_RST_SEL2);
 
 	/* GPIO Set 3 */
 	if (gpio->set3.level)
-		outl(*((u32*)gpio->set3.level), gpiobase + GP_LVL3);
+		outl(*((u32 *)gpio->set3.level), gpiobase + GP_LVL3);
 	if (gpio->set3.mode)
-		outl(*((u32*)gpio->set3.mode), gpiobase + GPIO_USE_SEL3);
+		outl(*((u32 *)gpio->set3.mode), gpiobase + GPIO_USE_SEL3);
 	if (gpio->set3.direction)
-		outl(*((u32*)gpio->set3.direction), gpiobase + GP_IO_SEL3);
+		outl(*((u32 *)gpio->set3.direction), gpiobase + GP_IO_SEL3);
 	if (gpio->set3.reset)
-		outl(*((u32*)gpio->set3.reset), gpiobase + GP_RST_SEL3);
+		outl(*((u32 *)gpio->set3.reset), gpiobase + GP_RST_SEL3);
 }
 
+/*
+ * return current gpio level.
+ */
 int get_gpio(int gpio_num)
 {
-	static const int gpio_reg_offsets[] = {0xc, 0x38, 0x48};
+	static const int gpio_reg_offsets[] = {GP_LVL, GP_LVL2, GP_LVL3};
 	u16 gpio_base = get_gpio_base();
 	int index, bit;
 
@@ -106,9 +130,14 @@ unsigned get_gpios(const int *gpio_num_array)
 	return vector;
 }
 
+/*
+ * set gpio output to level.
+ */
 void set_gpio(int gpio_num, int value)
 {
-	static const int gpio_reg_offsets[] = {0xc, 0x38, 0x48};
+	static const int gpio_reg_offsets[] = {
+		GP_LVL, GP_LVL2, GP_LVL3
+	};
 	u16 gpio_base = get_gpio_base();
 	int index, bit;
 	u32 config;

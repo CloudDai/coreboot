@@ -32,7 +32,7 @@
 #include "raminit_native.h"
 #include <northbridge/intel/sandybridge/chip.h>
 #include "southbridge/intel/bd82x6x/pch.h"
-#include "southbridge/intel/bd82x6x/gpio.h"
+#include "southbridge/intel/common/gpio.h"
 
 #define HOST_BRIDGE	PCI_DEVFN(0, 0)
 #define DEFAULT_TCK	TCK_800MHZ
