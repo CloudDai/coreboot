@@ -27,3 +27,15 @@ config DIGITIZER_ABSENT
 endchoice
 
 endif
+
+config DRIVERS_LENOVO_HYBRID_GRAPHICS
+	bool
+	default n
+
+if DRIVERS_LENOVO_HYBRID_GRAPHICS
+
+config HYBRID_GRAPHICS_GPIO_NUM
+	int
+	default 52
+
+endif
